@@ -135,16 +135,16 @@ Consumers include a billing service (triggers payment on COMPLETED), a notificat
 
 ---
 
-## Component Responsibilities Summary
+## Component Responsibilities Summary.
 
-| Component              | Responsibility                                         | Communicates Via         |
-|------------------------|--------------------------------------------------------|--------------------------|
-| Load Balancer          | TLS termination, routing, health checks                | HTTPS (inbound)          |
-| Ride API               | Ride request, status, lifecycle transitions            | HTTP (internal)          |
-| Driver Location API    | High-frequency location + availability ingestion       | HTTP (internal)          |
-| RideLifecycleService   | Ride state machine, event publishing                   | PostgreSQL + Kafka        |
-| MatchingService        | Geospatial driver candidate query and ranking          | Redis                    |
-| DriverLocationService  | Geo-index writes, availability TTL management          | Redis + Kafka (async)    |
-| Redis                  | Driver geo-index + availability TTL store              | In-memory                |
-| PostgreSQL             | Durable ride, driver, user, and event records          | TCP                      |
-| Kafka                  | Ride lifecycle event stream                            | Kafka protocol           |
+| Component             | Responsibility                                   | Communicates Via      |
+| --------------------- | ------------------------------------------------ | --------------------- |
+| Load Balancer         | TLS termination, routing, health checks          | HTTPS (inbound)       |
+| Ride API              | Ride request, status, lifecycle transitions      | HTTP (internal)       |
+| Driver Location API   | High-frequency location + availability ingestion | HTTP (internal)       |
+| RideLifecycleService  | Ride state machine, event publishing             | PostgreSQL + Kafka    |
+| MatchingService       | Geospatial driver candidate query and ranking    | Redis                 |
+| DriverLocationService | Geo-index writes, availability TTL management    | Redis + Kafka (async) |
+| Redis                 | Driver geo-index + availability TTL store        | In-memory             |
+| PostgreSQL            | Durable ride, driver, user, and event records    | TCP                   |
+| Kafka                 | Ride lifecycle event stream                      | Kafka protocol        |
