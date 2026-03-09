@@ -2,7 +2,7 @@
 
 ---
 
-## Functional Requirements
+## Functional Requirements.
 
 **FR-01** — The system shall allow a rider to submit a ride request with pickup and dropoff
 coordinates and receive either a matched driver or a no-driver-available response.
