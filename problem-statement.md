@@ -40,9 +40,10 @@ rides generate revenue, unmatched requests generate churn.
 
 ---
 
-## Section 3 — Scope of This Implementation
+## Section 3 — Scope of This Implementation.
 
 **In scope:**
+
 - Rider-initiated ride requests with pickup and dropoff coordinates
 - Real-time driver location ingestion and geospatial indexing via Redis
 - Driver matching algorithm (nearest available driver within configurable radius)
@@ -52,6 +53,7 @@ rides generate revenue, unmatched requests generate churn.
 - REST API for ride operations and driver location updates
 
 **Out of scope:**
+
 - Fare calculation and dynamic pricing (surge pricing)
 - In-app navigation or route optimisation
 - Payment processing (assumed handled by the Payment Processing System)
