@@ -93,7 +93,7 @@ every ride lifecycle transition.
 
 ---
 
-## Data Flow
+## Data Flow.
 
 ### Ride Request — Happy Path
 
