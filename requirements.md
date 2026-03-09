@@ -44,28 +44,33 @@ every ride lifecycle transition.
 ## Non-Functional Requirements
 
 ### Availability
+
 - **NFR-01** — The system shall maintain 99.9% uptime.
 - **NFR-02** — Redis geo-index loss must self-heal within 30 seconds through driver
   location republications without operator intervention.
 
 ### Latency
+
 - **NFR-03** — Ride match response time (request received to driver identified) p95 ≤ 2,000ms.
 - **NFR-04** — `PATCH /drivers/{id}/location` p99 ≤ 50ms (location ping must not lag the driver app).
 - **NFR-05** — Ride state transition API p99 ≤ 300ms.
 
 ### Throughput
+
 - **NFR-06** — The system shall support 10,000 concurrent active rides.
 - **NFR-07** — The system shall track 200,000 active driver locations simultaneously.
 - **NFR-08** — The system shall handle 40,000 driver location pings per second at peak
   (200,000 drivers × 1 ping/5s).
 
 ### Consistency
+
 - **NFR-09** — Ride state transitions are strongly consistent — a read immediately after a
   transition must reflect the new state.
 - **NFR-10** — Driver location data in the geo-index may be up to 5 seconds stale (one ping
   interval) under normal operation. This is acceptable for matching purposes.
 
 ### Durability
+
 - **NFR-11** — Every ride state transition shall be durably persisted in PostgreSQL before
   the state transition API returns success.
 - **NFR-12** — Driver location data in Redis is ephemeral. Loss of location data does not
@@ -73,18 +78,18 @@ every ride lifecycle transition.
 
 ---
 
-## Estimated Traffic
+## Estimated Traffic.
 
-| Metric                              | Estimate                    |
-|-------------------------------------|-----------------------------|
-| Registered users (riders)           | 1,000,000                   |
-| Registered drivers                  | 200,000                     |
-| Concurrent active rides             | 10,000                      |
-| Driver location pings/second        | 40,000                      |
-| Ride requests/day                   | 500,000                     |
-| Peak ride request rate              | 500 requests/second         |
-| Ride events published/day (Kafka)   | ~2,500,000 (5 per ride avg) |
-| Average ride duration               | 20 minutes                  |
+| Metric                            | Estimate                    |
+| --------------------------------- | --------------------------- |
+| Registered users (riders)         | 1,000,000                   |
+| Registered drivers                | 200,000                     |
+| Concurrent active rides           | 10,000                      |
+| Driver location pings/second      | 40,000                      |
+| Ride requests/day                 | 500,000                     |
+| Peak ride request rate            | 500 requests/second         |
+| Ride events published/day (Kafka) | ~2,500,000 (5 per ride avg) |
+| Average ride duration             | 20 minutes                  |
 
 ---
 
