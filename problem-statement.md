@@ -2,7 +2,7 @@
 
 ---
 
-## Section 1 — The Problem
+## Section 1 — The Problem.
 
 A ride-sharing platform connects people who need a ride with drivers who are available nearby.
 The core user experience depends entirely on speed: a rider taps a button and expects to see
