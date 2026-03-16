@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("RideSharing.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f1ef2b84899d8ee91fae3c34579e9bc77e6a7d4a")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+2dd7bc79ebea5cd21c5450cb0cf2d086de209738")]
 [assembly: System.Reflection.AssemblyProductAttribute("RideSharing.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("RideSharing.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
