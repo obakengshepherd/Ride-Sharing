@@ -6,6 +6,32 @@
 using RideSharing.Infrastructure.Cache;
 using RideSharing.Infrastructure.Messaging;
 using StackExchange.Redis;
+using Shared.Infrastructure.RateLimit;
+using Shared.Api.Controllers;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+
+// Rate limit rules for ride sharing
+builder.Services.AddSingleton<IEnumerable<RateLimitRule>>(
+    _ => RateLimitPolicies.RidePolicies());
+
+builder.Services.AddSingleton<TrueSlidingWindowChecker>();
+
+// Health checks
+builder.Services.AddHealthChecks()
+    .AddCheck<RedisHealthCheck>("redis",     failureStatus: HealthStatus.Degraded,  tags: ["cache"])
+    .AddCheck<KafkaHealthCheck>("kafka",     failureStatus: HealthStatus.Degraded,  tags: ["messaging"])
+    .AddCheck<PostgreSqlHealthCheck>("postgresql", failureStatus: HealthStatus.Unhealthy, tags: ["database"]);
+
+builder.Services.AddTransient<RedisHealthCheck>();
+builder.Services.AddTransient(_ => new PostgreSqlHealthCheck(builder.Configuration.GetConnectionString("PostgreSQL")!));
+builder.Services.AddTransient(_ => new KafkaHealthCheck(builder.Configuration.GetConnectionString("Kafka") ?? "localhost:9092"));
+
+// ── In the middleware pipeline, replace app.UseRateLimiter() with: ──
+// app.UseAuthentication();
+// app.UseAuthorization();
+// app.UseMiddleware<RedisRateLimitMiddleware>();
+// app.MapControllers();
+// app.MapHealthEndpoints();
 
 // Redis
 builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
