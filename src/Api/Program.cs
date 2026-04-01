@@ -1,59 +1,175 @@
-// Program.cs registration pattern matches digital-wallet.
-// Services: IRideService, IMatchingService, IDriverLocationService
-// Middleware: GlobalExceptionHandler, RequestLoggingMiddleware, JWT auth
-// Rate limiting: PATCH /drivers/{id}/location at 30/min per driver
-
+using System;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.IdentityModel.Tokens;
+using RideSharing.Api;
+using RideSharing.Api.Controllers;
+using RideSharing.Api.Middleware;
+using RideSharing.Application.Interfaces;
+using RideSharing.Application.Resilience;
+using RideSharing.Application.Services;
 using RideSharing.Infrastructure.Cache;
+using RideSharing.Infrastructure.Health;
+using RideSharing.Infrastructure.Persistence;
+using RideSharing.Infrastructure.RateLimit;
 using RideSharing.Infrastructure.Messaging;
 using StackExchange.Redis;
-using Shared.Infrastructure.RateLimit;
-using Shared.Api.Controllers;
-using Microsoft.Extensions.Diagnostics.HealthChecks;
 
-// Rate limit rules for ride sharing
-builder.Services.AddSingleton<IEnumerable<RateLimitRule>>(
-    _ => RateLimitPolicies.RidePolicies());
+var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddSingleton<TrueSlidingWindowChecker>();
+// ────────────────────────────────────────────────────────────────────────────
+// CORE SERVICES
+// ────────────────────────────────────────────────────────────────────────────
 
-// Health checks
-builder.Services.AddHealthChecks()
-    .AddCheck<RedisHealthCheck>("redis",     failureStatus: HealthStatus.Degraded,  tags: ["cache"])
-    .AddCheck<KafkaHealthCheck>("kafka",     failureStatus: HealthStatus.Degraded,  tags: ["messaging"])
-    .AddCheck<PostgreSqlHealthCheck>("postgresql", failureStatus: HealthStatus.Unhealthy, tags: ["database"]);
+// Redis (singleton — shared connection multiplexer)
+builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
+{
+    var redisUrl = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6380";
+    try
+    {
+        return ConnectionMultiplexer.Connect(redisUrl);
+    }
+    catch (Exception ex)
+    {
+        sp.GetRequiredService<ILogger<Program>>()
+            .LogError(ex, "Failed to connect to Redis at {RedisUrl}", redisUrl);
+        throw;
+    }
+});
 
-builder.Services.AddTransient<RedisHealthCheck>();
-builder.Services.AddTransient(_ => new PostgreSqlHealthCheck(builder.Configuration.GetConnectionString("PostgreSQL")!));
-builder.Services.AddTransient(_ => new KafkaHealthCheck(builder.Configuration.GetConnectionString("Kafka") ?? "localhost:9092"));
+// ────────────────────────────────────────────────────────────────────────────
+// INFRASTRUCTURE SERVICES
+// ────────────────────────────────────────────────────────────────────────────
 
-// ── In the middleware pipeline, replace app.UseRateLimiter() with: ──
-// app.UseAuthentication();
-// app.UseAuthorization();
-// app.UseMiddleware<RedisRateLimitMiddleware>();
-// app.MapControllers();
-// app.MapHealthEndpoints();
+// Repositories
+builder.Services.AddScoped<RideRepository>();
 
-// Redis
-builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
-    ConnectionMultiplexer.Connect(
-        builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379"));
-builder.Services.AddSingleton<RideShareCacheService>();      // Phase 5 extended version
-builder.Services.AddSingleton<DriverGeoIndexService>();       // Phase 4 geo-index
+// Cache services (Redis-backed, singleton)
+builder.Services.AddSingleton<RideShareCacheService>();
+builder.Services.AddSingleton<DriverGeoIndexService>();
 
-// Kafka
+// Messaging
 builder.Services.AddSingleton<RideEventPublisher>();
 
-// Kafka consumer (driver location persistence)
-builder.Services.AddSingleton<DriverLocationPersistenceConsumer>();
-builder.Services.AddHostedService<DriverLocationPersistenceWorker>();
+// ────────────────────────────────────────────────────────────────────────────
+// APPLICATION SERVICES
+// ────────────────────────────────────────────────────────────────────────────
 
-// Repositories and services
-builder.Services.AddScoped<RideRepository>();
 builder.Services.AddScoped<IRideService, RideService>();
 builder.Services.AddScoped<IMatchingService, MatchingService>();
 builder.Services.AddScoped<IDriverLocationService, DriverLocationService>();
 
-// Health checks
+// ────────────────────────────────────────────────────────────────────────────
+// RESILIENCE POLICIES
+// ────────────────────────────────────────────────────────────────────────────
+
+builder.Services.AddResiliencePolicies(builder.Configuration);
+
+// ────────────────────────────────────────────────────────────────────────────
+// HEALTH CHECKS
+// ────────────────────────────────────────────────────────────────────────────
+
+builder.Services.AddSingleton<RedisHealthCheck>(sp =>
+    new RedisHealthCheck(
+        sp.GetRequiredService<IConnectionMultiplexer>(),
+        sp.GetRequiredService<ILogger<RedisHealthCheck>>()));
+
+builder.Services.AddSingleton<PostgreSqlHealthCheck>(sp =>
+    new PostgreSqlHealthCheck(
+        builder.Configuration.GetConnectionString("PostgreSQL") ?? "Host=localhost;Database=ride_sharing",
+        sp.GetRequiredService<ILogger<PostgreSqlHealthCheck>>()));
+
+builder.Services.AddSingleton<KafkaHealthCheck>(sp =>
+    new KafkaHealthCheck(
+        builder.Configuration.GetConnectionString("Kafka") ?? "localhost:9092",
+        sp.GetRequiredService<ILogger<KafkaHealthCheck>>()));
+
 builder.Services.AddHealthChecks()
-    .AddNpgsql(builder.Configuration.GetConnectionString("PostgreSQL")!)
-    .AddRedis(builder.Configuration.GetConnectionString("Redis")!);
+    .AddCheck<RedisHealthCheck>("Redis", HealthStatus.Degraded, ["cache", "realtime"])
+    .AddCheck<PostgreSqlHealthCheck>("PostgreSQL", HealthStatus.Unhealthy, ["database"])
+    .AddCheck<KafkaHealthCheck>("Kafka", HealthStatus.Degraded, ["messaging"]);
+
+// ────────────────────────────────────────────────────────────────────────────
+// AUTHENTICATION & AUTHORIZATION
+// ────────────────────────────────────────────────────────────────────────────
+
+var disableAuth = builder.Configuration.GetValue<bool>("Authentication:DisableAuthentication");
+
+if (!disableAuth)
+{
+    var authority = builder.Configuration["Authentication:Authority"] 
+        ?? builder.Configuration["Jwt:Authority"]
+        ?? throw new InvalidOperationException("Jwt:Authority not configured");
+
+    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddJwtBearer(options =>
+        {
+            options.Authority = authority;
+            options.TokenValidationParameters = new TokenValidationParameters
+            {
+                ValidateAudience = builder.Configuration.GetValue<bool>("Jwt:ValidateAudience"),
+                ValidateLifetime = builder.Configuration.GetValue<bool>("Jwt:ValidateLifetime"),
+                ValidateIssuerSigningKey = builder.Configuration.GetValue<bool>("Jwt:ValidateIssuerSigningKey")
+            };
+        });
+}
+else
+{
+    builder.Services.AddAuthentication("DevAuth")
+        .AddScheme<DevAuthenticationSchemeOptions, DevAuthenticationHandler>("DevAuth", null);
+}
+
+builder.Services.AddAuthorization();
+
+// ────────────────────────────────────────────────────────────────────────────
+// CONTROLLERS & API
+// ────────────────────────────────────────────────────────────────────────────
+
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+    {
+        Title = "Ride Sharing API",
+        Version = "v1",
+        Description = "Event-driven ride-hailing backend with Redis geo-indexing and Kafka event streaming"
+    });
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// BUILD APPLICATION
+// ────────────────────────────────────────────────────────────────────────────
+
+var app = builder.Build();
+
+// Middleware pipeline (order matters!)
+app.UseMiddleware<GlobalExceptionHandler>();
+app.UseMiddleware<RequestLoggingMiddleware>();
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", "Ride Sharing API v1");
+    });
+}
+
+app.UseHttpsRedirection();
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseMiddleware<RedisRateLimitMiddleware>();
+
+// Endpoints
+app.MapControllers();
+app.MapHealthChecks("/health");
+app.MapCircuitBreakerEndpoints();
+
+await app.RunAsync();

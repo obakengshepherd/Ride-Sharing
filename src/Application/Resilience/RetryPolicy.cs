@@ -205,28 +205,20 @@ public class RetryPolicy
     /// </summary>
     public static bool DefaultIsRetryable(Exception ex) => ex switch
     {
-        // Transient PostgreSQL failures (connection lost, server restart, etc.)
+        // Transient PostgreSQL failures
         Npgsql.NpgsqlException { IsTransient: true }  => true,
 
-        // Network-level I/O failures
-        System.Net.Http.HttpRequestException          => true,
+        // Network, timeout, and I/O failures (covers most transient errors)
         System.IO.IOException                         => true,
+        System.Net.Http.HttpRequestException          => true,
         TimeoutException                              => true,
+        OperationCanceledException                    => true,
 
-        // Socket-level failures
-        System.Net.Sockets.SocketException            => true,
+        // Redis failures  
+        StackExchange.Redis.RedisException            => true,
 
-        // StackExchange.Redis connection failures
-        StackExchange.Redis.RedisConnectionException  => true,
-        StackExchange.Redis.RedisTimeoutException     => true,
-
-        // Confluent.Kafka transient failures
-        Confluent.Kafka.KafkaException k
-            when k.Error.IsTransient                  => true,
-
-        // RabbitMQ transient failures
-        RabbitMQ.Client.Exceptions.BrokerUnreachableException => true,
-        RabbitMQ.Client.Exceptions.AlreadyClosedException     => true,
+        // Kafka failures
+        Confluent.Kafka.KafkaException                => true,
 
         // Anything else — do not retry
         _                                             => false

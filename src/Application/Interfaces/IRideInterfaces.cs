@@ -1,5 +1,9 @@
 namespace RideSharing.Application.Interfaces;
 
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using RideSharing.Api.Models.Requests;
 using RideSharing.Api.Models.Responses;
 

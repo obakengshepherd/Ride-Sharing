@@ -1,3 +1,5 @@
+using System;
+
 namespace RideSharing.Domain.Events;
 
 public abstract record DomainEvent
